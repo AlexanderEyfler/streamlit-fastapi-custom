@@ -12,45 +12,6 @@ from time import time
 import re
 import unicodedata
 
-script_path = Path(__file__).resolve()
-script_dir = script_path.parent
-path_stopwords = script_dir.parent / 'data' / 'tf-idf' / 'stop_words.pkl'
-
-stop_words = joblib.load(path_stopwords)
-
-## Функция предобработки текста
-##----------------------------------------------------------------------------
-def custom_clean(text):
-    text = text.lower()  # нижний регистр
-    text = re.sub(r'http\S+', " ", text)  # удаляем ссылки
-    text = re.sub(r'@\w+',' ',text)  # удаляем упоминания пользователей
-    text = re.sub(r'#\w+', ' ', text)  # удаляем хэштеги
-    text = re.sub(r'\d+', ' ', text)  # удаляем числа
-
-    # Удаляем эмодзи и специальные символы © и ®
-    def remove_emojis(text):
-        return ''.join(
-            c for c in text
-            if not unicodedata.category(c) in ('So', 'Cn', 'Cs')
-        )
-    text = remove_emojis(text)
-
-    # Удаляем пунктуацию и специальные символы
-    def remove_punctuation(text):
-        return ''.join(c for c in text if not unicodedata.category(c).startswith('P'))
-    text = remove_punctuation(text)
-
-    # Удаляем лишние пробелы
-    text = re.sub(r'\s+', ' ', text).strip()
-
-    # Удаляем все слова на английском языке
-    text = re.sub(r'\b[a-z]+\b', ' ', text)
-
-    # Удаляем стоп-слова на русском языке
-    text = ' '.join([word for word in text.split() if word not in stop_words])
-
-    return text
-##----------------------------------------------------------------------------
 
 # Определяем путь к директории скрипта
 script_path = Path(__file__).resolve()
@@ -58,13 +19,15 @@ script_dir = script_path.parent
 
 ## Пути для LSTM
 ##----------------------------------------------------------------------------
-path_lstm = script_dir.parent / 'data' / 'lstm' / 'lstm_model.pth'
-path_int_to_vocab = script_dir.parent / 'data' / 'lstm' / 'int_to_vocab.pkl'
-path_vocab_to_int = script_dir.parent / 'data' / 'lstm' / 'vocab_to_int.pkl'
-path_f1_lstm = script_dir.parent / 'data' / 'lstm' / 'val_f1.pkl'
+path_lstm = script_dir.parent / 'data' / 'lstm_model.pth'
+path_int_to_vocab = script_dir.parent / 'data' / 'int_to_vocab.pkl'
+path_vocab_to_int = script_dir.parent / 'data' / 'vocab_to_int.pkl'
+# path_f1_lstm = script_dir.parent / 'data' / 'lstm' / 'val_f1.pkl'
+path_stopwords = script_dir.parent / 'data' / 'stop_words.pkl'
 ##----------------------------------------------------------------------------
 
 # Загрузка словарей
+stop_words = joblib.load(path_stopwords)
 vocab_to_int = joblib.load(path_vocab_to_int)
 int_to_vocab = joblib.load(path_int_to_vocab)
 
@@ -77,11 +40,11 @@ HIDDEN_SIZE = 32
 
 ## Загрузка LSTM
 ##----------------------------------------------------------------------------
-@st.cache_resource
+# @st.cache_resource
 def load_lstm():
-    # Загрузка словарей
-    vocab_to_int = joblib.load(path_vocab_to_int)
-    int_to_vocab = joblib.load(path_int_to_vocab)
+    # # Загрузка словарей
+    # vocab_to_int = joblib.load(path_vocab_to_int)
+    # int_to_vocab = joblib.load(path_int_to_vocab)
 
     # Загрузка модели
     model_lstm = LSTMConcatAttention()
@@ -89,9 +52,15 @@ def load_lstm():
     model_lstm.eval()
 
     # Загрузка метрики
-    val_f1 = joblib.load(path_f1_lstm)
+    # val_f1 = joblib.load(path_f1_lstm)
 
-    return model_lstm, vocab_to_int, int_to_vocab, val_f1
+    return model_lstm # , vocab_to_int, int_to_vocab # , val_f1
+
+def load_vocabs():
+    # Загрузка словарей
+    vocab_to_int = joblib.load(path_vocab_to_int)
+    int_to_vocab = joblib.load(path_int_to_vocab)
+    return vocab_to_int, int_to_vocab
 
 ## Определение класса Attention
 ##----------------------------------------------------------------------------
@@ -171,6 +140,40 @@ def padding(review_int: list, seq_len: int) -> np.array: # type: ignore
     return features
 ##----------------------------------------------------------------------------
 
+## Функция предобработки текста
+##----------------------------------------------------------------------------
+def custom_clean(text):
+    text = text.lower()  # нижний регистр
+    text = re.sub(r'http\S+', " ", text)  # удаляем ссылки
+    text = re.sub(r'@\w+',' ',text)  # удаляем упоминания пользователей
+    text = re.sub(r'#\w+', ' ', text)  # удаляем хэштеги
+    text = re.sub(r'\d+', ' ', text)  # удаляем числа
+
+    # Удаляем эмодзи и специальные символы © и ®
+    def remove_emojis(text):
+        return ''.join(
+            c for c in text
+            if not unicodedata.category(c) in ('So', 'Cn', 'Cs')
+        )
+    text = remove_emojis(text)
+
+    # Удаляем пунктуацию и специальные символы
+    def remove_punctuation(text):
+        return ''.join(c for c in text if not unicodedata.category(c).startswith('P'))
+    text = remove_punctuation(text)
+
+    # Удаляем лишние пробелы
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Удаляем все слова на английском языке
+    text = re.sub(r'\b[a-z]+\b', ' ', text)
+
+    # Удаляем стоп-слова на русском языке
+    text = ' '.join([word for word in text.split() if word not in stop_words])
+
+    return text
+##----------------------------------------------------------------------------
+
 ## Определение функци препроцессинга одной строки (из лекции)
 ##----------------------------------------------------------------------------
 def preprocess_single_string(
@@ -225,5 +228,9 @@ def predict_lstm(review: str, seq_len: int, model, vocab_to_int):
     predicted_class = torch.argmax(pred, dim=1).item()
     # Получаем вероятности для каждого класса
     probabilities = torch.softmax(pred, dim=1).squeeze().cpu().numpy()
+    
+    print(f"Model output (logits): {pred}")
+    print(f"Predicted class: {predicted_class}")
+    print(f"Probabilities: {probabilities}")
 
     return predicted_class, probabilities, prediction_time

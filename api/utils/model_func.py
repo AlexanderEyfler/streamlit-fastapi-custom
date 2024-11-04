@@ -30,12 +30,12 @@ def load_pt_model():
     Returns resnet model with IMAGENET weights
     '''
     model = resnet18()
-    model.load_state_dict(torch.load('api/weights/resnet18-weights.pth', map_location='cpu'))
+    model.load_state_dict(torch.load('api/data/resnet18-weights.pth', map_location='cpu'))
     model.eval()
     return model
 
 def load_sklearn_model():
-    clf = joblib.load('api/weights/logreg.pkl')
+    clf = joblib.load('api/data/logreg.pkl')
     return clf
 
 def transform_image(img):

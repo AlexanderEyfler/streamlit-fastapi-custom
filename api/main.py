@@ -12,6 +12,7 @@ from utils.model_func import (
     class_id_to_label, load_pt_model,
     load_sklearn_model, transform_image
 )
+from utils.lstm import load_lstm, predict_lstm, load_vocabs
 
 logger = logging.getLogger('uvicorn.info')
 
@@ -40,7 +41,8 @@ class TableOutput(BaseModel):
     prediction: float # Предсказанное значение (например, 1 или 0)
 
 
-pt_model = None  # Глобальная переменная для PyTorch модели
+pt_model = None  # Глобальная переменная для PyTorch СV модели
+tx_model = None  # Глобальная переменная для PyTorch LSTM модели
 sk_model = None  # Глобальная переменная для Sklearn модели
 
 @asynccontextmanager
@@ -50,16 +52,21 @@ async def lifespan(app: FastAPI):
     Загружает модели машинного обучения при запуске приложения и удаляет их после завершения.
     """
     global pt_model
+    global tx_model
     global sk_model
+    
     # Загрузка PyTorch модели
     pt_model = load_pt_model()
     logger.info('Torch model loaded')
+    # Загрузка LSTM модели
+    tx_model = load_lstm()
+    logger.info('LSTM model loaded')
     # Загрузка Sklearn модели
     sk_model = load_sklearn_model()
     logger.info('Sklearn model loaded')
     yield
     # Удаление моделей и освобождение ресурсов
-    del pt_model, sk_model
+    del pt_model, tx_model, sk_model
 
 app = FastAPI(lifespan=lifespan)
 
@@ -68,7 +75,7 @@ def return_info():
     """
     Возвращает приветственное сообщение при обращении к корневому маршруту API.
     """
-    return 'Hello FastAPI!'
+    return 'Hello, this is first FastAPI!'
 
 @app.post('/clf_image')
 def classify_image(file: UploadFile):
@@ -106,18 +113,33 @@ def predict(x: TableInput):
     result = TableOutput(prediction=prediction[0])
     return result
 
+# Определение констант
+SEQ_LEN = 64
+
 @app.post('/clf_text')
 def clf_text(data: TextInput):
     """
     Эндпоинт для классификации текста.
-    Случайно генерирует метку класса и вероятность для демонстрационных целей.
+    Принимает текст отзыва на ресторан на русском языке и возвращает класс
+    отзыва (негативный (0), нейтральный (1) или позитивный (2)) с вероятностью.
     """
-    # Генерация случайного класса и вероятности
-    pred_class = random.choice(['positive', 'negative'])
-    probability = random.random()
+    # загрузка словарей
+    vocab_to_int, _ = load_vocabs()
+    # получение предсказания
+    predicted_class, probabilities, _ = predict_lstm(
+                data.text, SEQ_LEN, tx_model, vocab_to_int
+            )
+    probability = probabilities[predicted_class]
+    # Определение текстовой метки класса
+    label_mapping = {
+        0: 'Negative',
+        1: 'Neutral',
+        2: 'Positive'
+    }
+    
     # Формирование ответа
     response = TextResponse(
-        label=pred_class,
+        label=label_mapping.get(predicted_class, 'Unknown'),
         prob=probability
     )
     return response
