@@ -148,6 +148,8 @@ if __name__ == "__main__":
     # Запуск приложения на localhost с использованием Uvicorn
     # производится из командной строки: python your/path/api/main.py
     uvicorn.run("main:app", host='127.0.0.1', port=8000, reload=True)
+    # uvicorn.run("main:app", host='0.0.0.0', port=8000, reload=True) это надо прописать
+    # чтобы светился на весь интернет работал
 
 ##### 
 # Проверка с помощью утилиты cURL:
